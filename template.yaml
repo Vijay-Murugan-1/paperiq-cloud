@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: PaperIQ serverless RAG application
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Environment:
+      Variables:
+        GEMINI_API_KEY: !Ref GeminiApiKey
+        GEMINI_MODEL: gemini-2.5-flash
+        PINECONE_API_KEY: !Ref PineconeApiKey
+        PINECONE_INDEX_NAME: !Ref PineconeIndexName
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+
+  PineconeApiKey:
+    Type: String
+    NoEcho: true
+
+  PineconeIndexName:
+    Type: String
+    Default: paperiq
+
+Resources:
+  PaperIQDocumentBucket:
+    Type: AWS::S3::Bucket
+
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paperiq-ingestion
+      CodeUri: .
+      Handler: ingestion.handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref PaperIQDocumentBucket
+        - AWSLambdaBasicExecutionRole
+      Events:
+        PdfUpload:
+          Type: S3
+          Properties:
+            Bucket: !Ref PaperIQDocumentBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+
+  QueryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: paperiq-query
+      CodeUri: .
+      Handler: assistant.handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 30
+      MemorySize: 512
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        QueryApi:
+          Type: Api
+          Properties:
+            Path: /query
+            Method: POST
+
+Outputs:
+  UploadBucketName:
+    Description: S3 bucket for PDF uploads
+    Value: !Ref PaperIQDocumentBucket
+
+  QueryApiUrl:
+    Description: PaperIQ query API endpoint
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/query"
