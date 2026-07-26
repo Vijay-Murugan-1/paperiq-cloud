@@ -1,0 +1,7 @@
+{
+  "body": "{\"query\": \"What is this document about?\"}",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  }
+}

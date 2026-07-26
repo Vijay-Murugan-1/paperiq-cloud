@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import boto3
+import tempfile
 
 from urllib.parse import unquote_plus
 from shared.pdf_processor import process_pdf
@@ -32,7 +33,7 @@ def lambda_handler(event, context):
                 logger.warning("Skipping non-PDF file: %s", object_key)
                 continue
             
-            download_path = f"/tmp/{os.path.basename(object_key)}"
+            download_path = os.path.join(tempfile.gettempdir(), os.path.basename(object_key))
             
             # Download PDF from S3
             logger.info("Downloading file to %s", download_path)

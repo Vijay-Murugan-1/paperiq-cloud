@@ -5,7 +5,7 @@ Description: PaperIQ serverless RAG application
 
 Globals:
   Function:
-    Runtime: python3.12
+    Runtime: python3.11
     Environment:
       Variables:
         GEMINI_API_KEY: !Ref GeminiApiKey
@@ -36,7 +36,6 @@ Resources:
       FunctionName: paperiq-ingestion
       CodeUri: .
       Handler: ingestion.handler.lambda_handler
-      Runtime: python3.12
       Timeout: 60
       MemorySize: 512
       Policies:
@@ -61,7 +60,6 @@ Resources:
       FunctionName: paperiq-query
       CodeUri: .
       Handler: assistant.handler.lambda_handler
-      Runtime: python3.12
       Timeout: 30
       MemorySize: 512
       Policies:

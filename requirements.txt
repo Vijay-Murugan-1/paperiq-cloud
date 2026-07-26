@@ -1,6 +1,6 @@
-boto3
-pinecone-client
-google-genai
-pypdf
-transformers
-python-dotenv
+boto3>=1.34.0
+google-genai>=0.1.1
+pinecone>=3.0.0
+pypdf>=4.0.0
+python-dotenv>=1.0.0
+numpy>=1.26.0,<2.0.0
