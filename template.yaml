@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-
 Description: PaperIQ serverless RAG application
 
 Globals:
@@ -12,6 +11,7 @@ Globals:
         GEMINI_MODEL: gemini-2.5-flash
         PINECONE_API_KEY: !Ref PineconeApiKey
         PINECONE_INDEX_NAME: !Ref PineconeIndexName
+        S3_BUCKET_NAME: !Sub "paperiq-document-bucket-${AWS::AccountId}-${AWS::Region}"
 
 Parameters:
   GeminiApiKey:
@@ -29,6 +29,8 @@ Parameters:
 Resources:
   PaperIQDocumentBucket:
     Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "paperiq-document-bucket-${AWS::AccountId}-${AWS::Region}"
 
   IngestionFunction:
     Type: AWS::Serverless::Function
@@ -39,11 +41,16 @@ Resources:
       Timeout: 60
       MemorySize: 512
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref PaperIQDocumentBucket
-        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub "arn:aws:s3:::paperiq-document-bucket-${AWS::AccountId}-${AWS::Region}"
+                - !Sub "arn:aws:s3:::paperiq-document-bucket-${AWS::AccountId}-${AWS::Region}/*"
       Events:
-        PdfUpload:
+        PdfUploadEvent:
           Type: S3
           Properties:
             Bucket: !Ref PaperIQDocumentBucket

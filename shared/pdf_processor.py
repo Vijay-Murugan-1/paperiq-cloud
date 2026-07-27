@@ -1,20 +1,26 @@
-import pypdf
+import fitz
 
-def process_pdf(file_path: str) -> list[dict]:
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """
-    Reads a PDF file and extracts text cleanly.
-    Returns a list of dictionaries containing page-numbered text blocks.
+    Extract all text from a PDF.
+
+    Args:
+        pdf_bytes: Raw PDF file content.
+
+    Returns:
+        Extracted document text.
     """
-    blocks = []
-    with open(file_path, "rb") as f:
-        reader = pypdf.PdfReader(f)
-        for i, page in enumerate(reader.pages):
-            text = page.extract_text()
-            if text:
-                text = text.strip()
-                if text:
-                    blocks.append({
-                        "page_number": i + 1,
-                        "text": text
-                    })
-    return blocks
+
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    try:
+        text = ""
+
+        for page in document:
+            text += page.get_text("text") + "\n"
+
+    finally:
+        document.close()
+
+    return text.strip()
