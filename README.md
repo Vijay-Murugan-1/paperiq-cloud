@@ -14,9 +14,3 @@ PaperIQ is a serverless Retrieval-Augmented Generation (RAG) application that al
 * `/shared` - Shared utilities across Lambda functions.
 * `template.yaml` - AWS SAM infrastructure template.
 
-## 🚀 Quick Start / Deployment
-
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/your-username/paperiq.git](https://github.com/your-username/paperiq.git)
-   cd paperiq
