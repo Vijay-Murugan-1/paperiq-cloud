@@ -1,8 +1,12 @@
-from transformers import AutoTokenizer
+import os
 
+# Direct Hugging Face downloads to AWS Lambda's writable directory
+os.environ["HF_HOME"] = "/tmp"
+
+from tokenizers import Tokenizer
 
 TOKENIZER_NAME = "BAAI/bge-small-en-v1.5"
-tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
+tokenizer = Tokenizer.from_pretrained(TOKENIZER_NAME)
 
 
 def create_chunks(
@@ -16,11 +20,8 @@ def create_chunks(
     if overlap >= chunk_size:
         raise ValueError("Overlap must be smaller than chunk size.")
 
-    tokens = tokenizer.encode(
-        text,
-        add_special_tokens=False,
-        truncation=False,
-    )
+    encoded = tokenizer.encode(text)
+    tokens = encoded.ids
 
     chunks = []
     step = chunk_size - overlap
@@ -31,10 +32,7 @@ def create_chunks(
         if not chunk_tokens:
             continue
 
-        chunk_text = tokenizer.decode(
-            chunk_tokens,
-            skip_special_tokens=True,
-        ).strip()
+        chunk_text = tokenizer.decode(chunk_tokens, skip_special_tokens=True).strip()
 
         if chunk_text:
             chunks.append(chunk_text)

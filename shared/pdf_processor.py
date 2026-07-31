@@ -1,5 +1,5 @@
-import fitz
-
+import io
+import pypdf
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """
@@ -11,16 +11,14 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     Returns:
         Extracted document text.
     """
-
-    document = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-    try:
-        text = ""
-
-        for page in document:
-            text += page.get_text("text") + "\n"
-
-    finally:
-        document.close()
-
+    # pypdf requires a file-like object, so we wrap the raw bytes
+    stream = io.BytesIO(pdf_bytes)
+    reader = pypdf.PdfReader(stream)
+    
+    text = ""
+    for page in reader.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted + "\n"
+            
     return text.strip()
