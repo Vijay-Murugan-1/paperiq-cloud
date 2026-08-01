@@ -22,6 +22,24 @@ if "paper" not in st.session_state:
 if "results_cache" not in st.session_state:
     st.session_state.results_cache = {}
 
+
+def parse_response_payload(raw_data):
+    """
+    Safely converts strings, markdown codeblocks, or dictionaries into clean Python data structures.
+    """
+    if isinstance(raw_data, (dict, list)):
+        return raw_data
+
+    if isinstance(raw_data, str):
+        cleaned = raw_data.replace("```json", "").replace("```", "").strip()
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            return raw_data
+
+    return raw_data
+
+
 # Helper function to call your AWS Lambda API
 def query_aws_assistant(task: str, doc_id: str, question: str = None, extra_params: dict = None):
     payload = {
@@ -40,20 +58,19 @@ def query_aws_assistant(task: str, doc_id: str, question: str = None, extra_para
     )
     return response
 
+
 # ==========================================
 # 2. MAIN APPLICATION
 # ==========================================
 def main() -> None:
-    # Always render title first so page is never blank
     st.title("PaperIQ! 📚")
     st.subheader("AI-based research assistant for papers (AWS Cloud Powered)")
-    
+
     st.write(
         "PaperIQ helps you quickly understand academic papers using serverless AI. "
         "Upload a PDF to Amazon S3, and ask questions, generate summaries, key insights, quizzes, or flashcards."
-    ) 
+    )
 
-    # Debug helper for environment variables
     if not S3_BUCKET_NAME or not API_ENDPOINT:
         st.warning("⚠️ `.env` variables missing! Ensure `S3_BUCKET_NAME` and `QUERY_API_URL` are set in `.env`.")
 
@@ -64,14 +81,13 @@ def main() -> None:
         file_name = uploaded_file.name
         st.info(f"Selected file: **{file_name}**")
 
-        # Check if this paper is already processed in state
         if st.session_state.paper is None or st.session_state.paper["name"] != file_name:
             if st.button("🚀 Process & Upload Paper to Cloud", type="primary"):
                 with st.spinner("Uploading to AWS S3..."):
                     try:
                         s3_client = boto3.client("s3")
                         s3_client.upload_fileobj(uploaded_file, S3_BUCKET_NAME, file_name)
-                        
+
                         st.session_state.paper = {
                             "name": file_name,
                             "s3_bucket": S3_BUCKET_NAME
@@ -141,13 +157,33 @@ def main() -> None:
                     res = query_aws_assistant(task="insights", doc_id=doc_id)
                     if res.status_code == 200:
                         data = res.json()
-                        st.session_state.results_cache["insights"] = data.get("result", data.get("response"))
+                        raw_result = data.get("result", data.get("response"))
+                        parsed = parse_response_payload(raw_result)
+
+                        # Standardize into a list of insights
+                        if isinstance(parsed, dict) and "insights" in parsed:
+                            st.session_state.results_cache["insights"] = parsed["insights"]
+                        elif isinstance(parsed, list):
+                            st.session_state.results_cache["insights"] = parsed
+                        else:
+                            st.session_state.results_cache["insights"] = parsed
                     else:
                         st.error(f"Error {res.status_code}: {res.text}")
 
             if "insights" in st.session_state.results_cache:
                 st.subheader("Key Insights")
-                st.write(st.session_state.results_cache["insights"])
+                insights = st.session_state.results_cache["insights"]
+
+                if isinstance(insights, list):
+                    for item in insights:
+                        with st.container(border=True):
+                            if isinstance(item, dict):
+                                st.markdown(f"### 💡 {item.get('title', 'Insight')}")
+                                st.write(item.get('description', ''))
+                            else:
+                                st.write(str(item))
+                else:
+                    st.write(insights)
 
         # ------------------------------------------
         # FEATURE 4: QUIZ GENERATOR
@@ -161,12 +197,24 @@ def main() -> None:
                     if res.status_code == 200:
                         data = res.json()
                         raw_result = data.get("result", data.get("response"))
-                        try:
-                            cleaned = raw_result.replace("```json", "").replace("```", "").strip()
-                            st.session_state.quiz_data = json.loads(cleaned)
+                        parsed = parse_response_payload(raw_result)
+
+                        # Extract questions list
+                        if isinstance(parsed, dict) and "quiz" in parsed:
+                            quiz_list = parsed["quiz"]
+                        elif isinstance(parsed, dict) and "questions" in parsed:
+                            quiz_list = parsed["questions"]
+                        elif isinstance(parsed, list):
+                            quiz_list = parsed
+                        else:
+                            quiz_list = None
+
+                        if quiz_list:
+                            st.session_state.quiz_data = quiz_list
                             st.session_state.show_results = False
                             st.session_state.user_answers = {}
-                        except Exception:
+                        else:
+                            st.warning("Could not parse quiz questions structure.")
                             st.write(raw_result)
                     else:
                         st.error(f"Error {res.status_code}: {res.text}")
@@ -176,16 +224,16 @@ def main() -> None:
                 with st.form("quiz_form"):
                     user_answers = {}
                     for i, q in enumerate(st.session_state.quiz_data):
-                        st.write(f"**Q{i+1}: {q['question']}**")
+                        st.write(f"**Q{i+1}: {q.get('question', '')}**")
                         user_answers[i] = st.radio(
                             "Options", 
-                            q["options"], 
+                            q.get("options", []), 
                             key=f"q_{i}", 
                             label_visibility="collapsed", 
                             index=None
                         )
                         st.write("---")
-                    
+
                     submitted = st.form_submit_button("Submit Answers")
                     if submitted:
                         st.session_state.user_answers = user_answers
@@ -195,12 +243,14 @@ def main() -> None:
                     score = 0
                     for i, q in enumerate(st.session_state.quiz_data):
                         user_ans = st.session_state.user_answers.get(i)
-                        if user_ans == q["correct_answer"]:
+                        correct_ans = q.get("correct_answer") or q.get("answer")
+
+                        if user_ans == correct_ans:
                             score += 1
                             st.success(f"**Q{i+1} Correct!**\n\n{q.get('explanation', '')}")
                         else:
-                            st.error(f"**Q{i+1} Incorrect.**\n\n**You chose:** {user_ans}\n\n**Correct answer:** {q['correct_answer']}\n\n*Explanation: {q.get('explanation', '')}*")
-                    
+                            st.error(f"**Q{i+1} Incorrect.**\n\n**You chose:** {user_ans}\n\n**Correct answer:** {correct_ans}\n\n*Explanation: {q.get('explanation', '')}*")
+
                     st.write(f"### Final Score: {score} / {len(st.session_state.quiz_data)}")
 
         # ------------------------------------------
@@ -215,12 +265,24 @@ def main() -> None:
                     if res.status_code == 200:
                         data = res.json()
                         raw_result = data.get("result", data.get("response"))
-                        try:
-                            cleaned = raw_result.replace("```json", "").replace("```", "").strip()
-                            st.session_state.flashcards_data = json.loads(cleaned)
+                        parsed = parse_response_payload(raw_result)
+
+                        # Extract flashcards list
+                        if isinstance(parsed, dict) and "flashcards" in parsed:
+                            cards_list = parsed["flashcards"]
+                        elif isinstance(parsed, dict) and "cards" in parsed:
+                            cards_list = parsed["cards"]
+                        elif isinstance(parsed, list):
+                            cards_list = parsed
+                        else:
+                            cards_list = None
+
+                        if cards_list:
+                            st.session_state.flashcards_data = cards_list
                             st.session_state.current_card = 0
                             st.session_state.is_flipped = False
-                        except Exception:
+                        else:
+                            st.warning("Could not parse flashcard structure.")
                             st.write(raw_result)
                     else:
                         st.error(f"Error {res.status_code}: {res.text}")
@@ -228,14 +290,17 @@ def main() -> None:
             if "flashcards_data" in st.session_state:
                 cards = st.session_state.flashcards_data
                 idx = st.session_state.current_card
-                
+
                 st.markdown(f"### Card {idx + 1} of {len(cards)}")
                 current_card_data = cards[idx]
-                
+
+                front = current_card_data.get("front") or current_card_data.get("question") or current_card_data.get("concept")
+                back = current_card_data.get("back") or current_card_data.get("answer") or current_card_data.get("definition")
+
                 if not st.session_state.is_flipped:
-                    st.info(f"**Front (Concept / Question):**\n\n### {current_card_data['front']}")
+                    st.info(f"**Front (Concept / Question):**\n\n### {front}")
                 else:
-                    st.success(f"**Back (Definition / Answer):**\n\n{current_card_data['back']}")
+                    st.success(f"**Back (Definition / Answer):**\n\n{back}")
 
                 col1, col2, col3 = st.columns(3)
                 with col1:
