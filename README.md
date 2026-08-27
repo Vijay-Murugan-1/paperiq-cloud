@@ -49,3 +49,5 @@ PaperIQ uses a decoupled, event-driven serverless architecture designed for zero
                                          │  Gemini AI Model │
                                          │                  │
                                          └──────────────────┘
+
+extract
